@@ -94,3 +94,24 @@ LOOP FOREVER:
 ## Analysis tips
 
 After each run, check `eval_results.json` for per-type recall to identify which categories need improvement. Focus your experiments on the weakest categories first.
+
+## External corpus evaluation
+
+After the synthetic evaluation reaches F1=1.0, validate on real-world data:
+
+```bash
+# Download external corpora (requires: pip install datasets)
+python fetch_corpus.py
+
+# Run three-mode external evaluation
+python evaluate_external.py
+```
+
+Three evaluation modes:
+1. **FP Analysis** — Run checker on clean external text, measure false positive rate
+2. **Extended Mutation Test** — Use external sentences as mutation base, measure F1
+3. **Real Error Detection** — Test against real punctuation errors from chinese_text_correction
+
+Key finding: news headlines/summaries frequently omit sentence-ending periods. The sentence-end check (SUGGESTION level in strict mode) will have elevated FP rates on news text — this is expected behavior.
+
+See `WORKFLOW.md` for the complete optimization history and external evaluation results.

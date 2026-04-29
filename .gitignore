@@ -1,5 +1,11 @@
 results.tsv
 run.log
 eval_results.json
+eval_external_results.json
+eval_external.log
+misses_*.json
+corpus_ud_gsd.txt
+corpus_hf_correction.txt
+corpus_hf_news.txt
 __pycache__/
 *.pyc
