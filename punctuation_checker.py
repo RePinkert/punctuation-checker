@@ -115,7 +115,8 @@ class PunctuationChecker:
         if not self._has_chinese(line):
             return
             
-        # 检测中文环境中的英文标点
+        cn_ctx = r'[\u4e00-\u9fff\u300a\u300b\u300c\u300d\u300e\u300f\u3010\u3011\uff08\uff09\u201c\u201d\u2018\u2019\u2026\u3001\uff0c\u3002\uff1b\uff1a\uff1f\uff01]'
+
         patterns = [
             (r'[\u4e00-\u9fff],', '，', '中文句子中使用了英文逗号'),
             (r'[\u4e00-\u9fff]\.(?![a-zA-Z0-9])', '。', '中文句子中使用了英文句号'),
@@ -124,6 +125,12 @@ class PunctuationChecker:
             (r'[\u4e00-\u9fff]\?', '？', '中文句子中使用了英文问号'),
             (r'[\u4e00-\u9fff]!', '！', '中文句子中使用了英文感叹号'),
             (r'[\u4e00-\u9fff]\([^\)]*[\u4e00-\u9fff]', '()', '中文句子中使用了英文括号'),
+            (fr'{cn_ctx},', '，', '中文标点后使用了英文逗号'),
+            (fr'{cn_ctx}\.(?![a-zA-Z0-9])', '。', '中文标点后使用了英文句号'),
+            (fr'{cn_ctx}:', '：', '中文标点后使用了英文冒号'),
+            (fr'{cn_ctx};', '；', '中文标点后使用了英文分号'),
+            (fr'{cn_ctx}\?', '？', '中文标点后使用了英文问号'),
+            (fr'{cn_ctx}!', '！', '中文标点后使用了英文感叹号'),
         ]
         
         for pattern, correct, msg in patterns:

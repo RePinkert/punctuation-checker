@@ -162,20 +162,26 @@ def mutate_remove_sentence_end(text: str) -> Optional[Tuple[str, List[str]]]:
     if not stripped:
         return None
     last_char = stripped[-1]
+    in_bracket = False
     if last_char not in "\u3002\uff1f\uff01\u2026":
         if last_char in "\u201d\u2019\uff09\u3011\u300b\u300d\u300f\"\')":
             if len(stripped) > 1:
                 last_char = stripped[-2]
+                in_bracket = True
             else:
                 return None
         else:
             return None
     if last_char not in "\u3002\uff1f\uff01\u2026":
         return None
-    idx = len(stripped) - 1
-    if last_char != stripped[-1]:
-        idx = len(stripped) - 2
-    mutated = text[:idx] + text[idx + 1:]
+    base = len(stripped) - 1
+    if in_bracket:
+        base = len(stripped) - 2
+    remove_len = 1
+    if last_char == "\u2026" and base > 0 and stripped[base - 1] == "\u2026":
+        remove_len = 2
+        base -= 1
+    mutated = text[:base] + text[base + remove_len:]
     if len(mutated.rstrip()) >= 5:
         return mutated, ["\u53e5\u672b\u6807\u70b9"]
     return None
