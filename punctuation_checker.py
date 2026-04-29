@@ -133,6 +133,25 @@ class PunctuationChecker:
             (fr'{cn_ctx}!', '！', '中文标点后使用了英文感叹号'),
         ]
         
+        paren_pattern = r'\(([^\)]*)\)'
+        for match in re.finditer(paren_pattern, line):
+            content = match.group(1)
+            has_cn_inside = any('\u4e00' <= c <= '\u9fff' for c in content)
+            has_en_inside = any(c.isascii() and c.isalpha() for c in content)
+            if has_cn_inside and not has_en_inside:
+                before = line[:match.start()]
+                if before and ('\u4e00' <= before[-1] <= '\u9fff' or before[-1] in '\uff0c\u3002\uff1b\uff1a\u201c\u201d'):
+                    col = match.start() + 1
+                    self.errors.append(PunctuationError(
+                        line=line_num,
+                        column=col,
+                        level=ErrorLevel.ERROR,
+                        error_type="\u4e2d\u82f1\u6587\u6807\u70b9\u6df7\u7528",
+                        message="\u4e2d\u6587\u53e5\u5b50\u4e2d\u4f7f\u7528\u4e86\u82f1\u6587\u62ec\u53f7",
+                        context=self._get_context(line, col),
+                        suggestion="\u5e94\u4f7f\u7528\u4e2d\u6587\u62ec\u53f7\u300c\uff08\uff09\u300d"
+                    ))
+
         for pattern, correct, msg in patterns:
             for match in re.finditer(pattern, line):
                 col = match.start() + 1
@@ -288,36 +307,36 @@ class PunctuationChecker:
         stripped = line.rstrip()
         if not stripped or len(stripped) < 5:
             return
-        
-        # 跳过标题、列表项
+
         if re.match(r'^[#*\-\d\.、]+', stripped):
             return
         if re.match(r'^[（\(]\d+[）\)]', stripped):
             return
-            
+
         last_char = stripped[-1]
-        
-        # 如果以引号等结尾，检查前一个字符
+
         if last_char in '"\u201d\u2019\'\u300f》）】」':
             if len(stripped) > 1:
                 last_char = stripped[-2]
             else:
                 return
-        
-        # 检查是否缺少句末标点
-        if self._has_chinese(stripped):
-            if last_char not in self.SENTENCE_END_PUNCS:
-                if last_char not in '：；;:':  # 冒号/分号结尾
-                    if self.strict_mode:
-                        self.errors.append(PunctuationError(
-                            line=line_num,
-                            column=len(stripped),
-                            level=ErrorLevel.SUGGESTION,
-                            error_type="句末标点",
-                            message="句子末尾可能缺少标点符号",
-                            context=self._get_context(line, len(stripped) - 1),
-                            suggestion="考虑在句末添加句号"
-                        ))
+
+        if last_char not in self.SENTENCE_END_PUNCS:
+            if last_char in '：；;:%％':
+                return
+            effective_end = stripped.rstrip('"\'\u201d\u2019\u300f》）】」')
+            if effective_end and re.search(r'[\d%％]$', effective_end):
+                return
+            if self._has_chinese(stripped):
+                self.errors.append(PunctuationError(
+                    line=line_num,
+                    column=len(stripped),
+                    level=ErrorLevel.SUGGESTION,
+                    error_type="句末标点",
+                    message="句子末尾可能缺少标点符号",
+                    context=self._get_context(line, len(stripped) - 1),
+                    suggestion="考虑在句末添加句号"
+                ))
 
 
 def format_report(errors: List[PunctuationError], show_suggestion: bool = True) -> str:
