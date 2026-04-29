@@ -187,6 +187,50 @@ def mutate_remove_sentence_end(text: str) -> Optional[Tuple[str, List[str]]]:
     return None
 
 
+def mutate_to_english_punc_midquote(text: str) -> Optional[Tuple[str, List[str]]]:
+    puncs = {
+        "\uff0c": ",",
+        "\u3002": ".",
+        "\uff1a": ":",
+        "\uff1b": ";",
+    }
+    quote = "\u201d"
+    if quote not in text:
+        return None
+    candidates = []
+    for i, ch in enumerate(text):
+        if ch in puncs and i > 0:
+            prev = text[i - 1]
+            if "\u4e00" <= prev <= "\u9fff" or prev in "\u201c\u201d\u2018\u2019":
+                candidates.append(i)
+    if not candidates:
+        return None
+    idx = random.choice(candidates)
+    old = text[idx]
+    new = puncs[old]
+    mutated = text[:idx] + new + text[idx + 1:]
+    return mutated, ["\u4e2d\u82f1\u6587\u6807\u70b9\u6df7\u7528"]
+
+
+def mutate_double_close(text: str) -> Optional[Tuple[str, List[str]]]:
+    closers = {
+        "\u201d": "\u201c",
+        "\uff09": "\uff08",
+        "\u3011": "\u3010",
+        "\u300b": "\u300a",
+    }
+    candidates = []
+    for close, open_c in closers.items():
+        for i, ch in enumerate(text):
+            if ch == close:
+                candidates.append((i, open_c))
+    if not candidates:
+        return None
+    idx, open_c = random.choice(candidates)
+    mutated = text[:idx + 1] + open_c
+    return mutated, ["\u6807\u70b9\u914d\u5bf9\u95ee\u9898"]
+
+
 MUTATORS = [
     mutate_to_english_punc,
     mutate_add_space_after,
@@ -196,6 +240,8 @@ MUTATORS = [
     mutate_ellipsis,
     mutate_dunhao_before_end,
     mutate_remove_sentence_end,
+    mutate_to_english_punc_midquote,
+    mutate_double_close,
 ]
 
 ERROR_TYPE_LABELS = {
@@ -207,6 +253,8 @@ ERROR_TYPE_LABELS = {
     "mutate_ellipsis": "\u7701\u7565\u53f7\u683c\u5f0f",
     "mutate_dunhao_before_end": "\u987f\u53f7\u4f7f\u7528",
     "mutate_remove_sentence_end": "\u53e5\u672b\u6807\u70b9",
+    "mutate_to_english_punc_midquote": "\u4e2d\u82f1\u6587\u6807\u70b9\u6df7\u7528",
+    "mutate_double_close": "\u6807\u70b9\u914d\u5bf9\u95ee\u9898",
 }
 
 
@@ -241,7 +289,7 @@ def generate_test_cases(n_per_mutator: int = 30) -> List[Dict]:
 
 
 def evaluate(checker_strict: bool = False) -> Dict:
-    cases = generate_test_cases(n_per_mutator=30)
+    cases = generate_test_cases(n_per_mutator=40)
     checker = PunctuationChecker(strict_mode=checker_strict)
 
     total_mutated = 0
