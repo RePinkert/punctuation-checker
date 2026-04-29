@@ -298,7 +298,7 @@ class PunctuationChecker:
         last_char = stripped[-1]
         
         # 如果以引号等结尾，检查前一个字符
-        if last_char in '"\'》）】」':
+        if last_char in '"\u201d\u2019\'\u300f》）】」':
             if len(stripped) > 1:
                 last_char = stripped[-2]
             else:
