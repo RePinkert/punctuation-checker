@@ -280,7 +280,7 @@ class PunctuationChecker:
             (r'\.{3,5}(?!\.)', '英文省略号应为三个点或使用中文省略号'),
             (r'(?<!\。)\。{3,5}(?!\。)', '中文省略号应为六个点'),
         ]
-        
+
         for pattern, msg in ellipsis_issues:
             for match in re.finditer(pattern, line):
                 col = match.start()
@@ -293,6 +293,19 @@ class PunctuationChecker:
                     context=self._get_context(line, col),
                     suggestion="中文省略号使用「……」，英文省略号使用「...」"
                 ))
+
+        # GB/T 15834-2011 A.9.2：省略号和"等"、"等等"等词语不能同时使用
+        for match in re.finditer(r'……\s*(等等?)', line):
+            col = match.start()
+            self.errors.append(PunctuationError(
+                line=line_num,
+                column=col + 1,
+                level=ErrorLevel.WARNING,
+                error_type="省略号格式",
+                message=f"省略号与「{match.group(1)}」不能同时使用",
+                context=self._get_context(line, col),
+                suggestion="删除省略号或删除「等」类词语"
+            ))
     
     def _check_dunhao_usage(self, line: str, line_num: int):
         """检测顿号使用"""
