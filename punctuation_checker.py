@@ -92,6 +92,7 @@ class PunctuationChecker:
         self._check_sentence_end(line, line_num)
         self._check_line_start_point(line, line_num)
         self._check_ordinal_conjunction(line, line_num)
+        self._check_date_dunhao(line, line_num)
 
     def _check_line_start_point(self, line: str, line_num: int):
         """GB/T 15834-2011 5.1.1：点号应置于文字之后，居左下，不出现在一行之首"""
@@ -119,6 +120,20 @@ class PunctuationChecker:
                 message=f"序次语「{match.group(1)}」之后应用逗号，不用顿号",
                 context=self._get_context(line, col),
                 suggestion="顿号改为逗号"
+            ))
+
+    def _check_date_dunhao(self, line: str, line_num: int):
+        """GB/T 15834-2011 A.4.4.2 / 4.13.3.1：数字年月日的简写形式用短横线连接号，不用顿号"""
+        for match in re.finditer(r'\d{4}、\d{1,2}、\d{1,2}', line):
+            col = match.start()
+            self.errors.append(PunctuationError(
+                line=line_num,
+                column=col + 1,
+                level=ErrorLevel.ERROR,
+                error_type="连接号",
+                message="数字年月日简写中不应使用顿号",
+                context=self._get_context(line, col),
+                suggestion="改为短横线连接号，如「2010-03-02」"
             ))
     
     def _get_context(self, line: str, col: int, width: int = 15) -> str:
