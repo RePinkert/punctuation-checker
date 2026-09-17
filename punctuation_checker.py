@@ -105,6 +105,11 @@ class PunctuationChecker:
         self._check_ordinal_conjunction(line, line_num)
         self._check_date_dunhao(line, line_num)
         self._check_numeric_range_dash(line, line_num)
+        self._check_dash_form(line, line_num)
+        self._check_gbt_matrix(line, line_num)
+        self._check_ellipsis_run(line, line_num)
+        self._check_ordinal_bracket(line, line_num)
+        self._check_arabic_ordinal(line, line_num)
 
     def _check_line_start_point(self, line: str, line_num: int):
         """GB/T 15834-2011 5.1.1：点号应置于文字之后，居左下，不出现在一行之首"""
@@ -170,6 +175,126 @@ class PunctuationChecker:
                 message="数值区间不应使用短横线",
                 context=self._get_context(line, col),
                 suggestion="改为一字线「—」或浪纹线「～」，如「3.75%—4.00%」"
+            ))
+
+    def _check_dash_form(self, line: str, line_num: int):
+        """GB/T 15834-2011 4.10.2：破折号形式「——」为两个一字线；
+        破折号位置的单个一字线为形式错误。一字线作为连接号连接数字
+        （4.13.3.2 时间/数值起止）属合法，不查"""
+        for match in re.finditer(r'—', line):
+            start, end = match.start(), match.end()
+            if start > 0 and line[start - 1] == '—':
+                continue
+            if end < len(line) and line[end] == '—':
+                continue
+            before = line[:start].rstrip()
+            after = line[end:].lstrip()
+            # 一字线紧邻数字（如 1031—1095、2月3日—10日）视为连接号
+            if before and after and (before[-1].isdigit() or after[0].isdigit()):
+                continue
+            # 成语/合成词中作连接号且两侧为汉字的情况无法与破折号区分，
+            # 仅当一侧是标点/行首行尾等非文字边界时保守不报；两侧均为
+            # 汉字或引号/书名号上下文才按破折号形式错误处理
+            if before and after and self._has_chinese(before[-1]) and self._has_chinese(after[:1]):
+                col = start
+                self.errors.append(PunctuationError(
+                    line=line_num,
+                    column=col + 1,
+                    level=ErrorLevel.WARNING,
+                    error_type="破折号形式",
+                    message="破折号「——」应占两个一字线位置，不应单用",
+                    context=self._get_context(line, col),
+                    suggestion="改为双字线「——」；若此处为数值/时间起止的连接号则应保留单线"
+                ))
+
+    def _check_gbt_matrix(self, line: str, line_num: int):
+        """coverage matrix 中标记为 G 的剩余条款（见 CLAUSE_COVERAGE.md）"""
+        rules = [
+            # B.2.4 省略号前后点号为语义判断（分句中点号可保留），归 S 类不实现
+            # G6 A.12：并列标题已用间隔号，不再用"和"
+            (r'《[^《》]{1,40}·[^《》]{0,20}》\s*(和|及)', ErrorLevel.SUGGESTION, "间隔号使用",
+             "并列标题间已用间隔号，不应再用「和」", "删去连接词（A.12）"),
+            # G7 A.13.5：篇名末尾的？！应在书名号内
+            (r'《[^《》]{1,60}》\s*([？！])', ErrorLevel.SUGGESTION, "书名号使用",
+             "篇名末尾的问号/叹号应放在书名号内", "将「\\1」移入《》（A.13.5）"),
+            # G8 A.14：分隔号前后不贴点号
+            (r'[、，；：。]\s*/|/\s*[、，；：。]', ErrorLevel.SUGGESTION, "分隔号使用",
+             "分隔号前后通常不用点号", "删除紧贴的分隔点号（A.14）"),
+            # G9/G14 4.8.3.4：同向双引号不可嵌套（外双内单）
+            (r'\u201c[^“”]{1,50}\u201c', ErrorLevel.ERROR, "引号使用",
+             "双引号内不可再嵌套双引号", "内层改用单引号「''」（4.8.3.4）"),
+            # G9b 4.9.3.6：同形括号不可嵌套
+            (r'\u3010[^【】]{1,50}\u3010', ErrorLevel.ERROR, "括号使用",
+             "同形括号不应嵌套套用", "内层换用其他形式括号（4.9.3.6）"),
+            (r'（[^（）]{1,50}（', ErrorLevel.ERROR, "括号使用",
+             "同形括号不应嵌套套用", "内层换用其他形式括号（4.9.3.6）"),
+            # G10 A.9.1 省略号连用改为 _check_ellipsis_run 单独计数
+
+            # 4.5.3.5 引号/书名号间顿号为「通常不用」软规则（语料 FP 10/2000），归 H 类
+            # G12 B.1.2：并列成分末尾用"等"类词时，"等"类词前不用顿号
+            (r'、\s*(等等?)', ErrorLevel.SUGGESTION, "顿号使用",
+             "「等」类词之前不用顿号", "删去顿号；若并列停顿改用逗号则前改用逗号（B.1.2）"),
+            # G13a 4.14.3.5：事件年月日的间隔号应用半角「·」
+            (r'\d{1,2}\s*[・•]\s*\d{1,2}', ErrorLevel.WARNING, "间隔号使用",
+             "间隔号不应使用「・」「•」", "改用半角「·」（4.14.3.5）"),
+            # G13b 4.14.3.5：间隔号两侧不应有空格
+            (r'\d{1,2}\s+·\s+\d{1,2}', ErrorLevel.WARNING, "间隔号使用",
+             "事件年月日间隔号两侧不应有空格", "紧凑书写如「9·11」（4.14.3.5）"),
+        ]
+        for pattern, level, etype, msg, sugg in rules:
+            for match in re.finditer(pattern, line):
+                col = match.start()
+                self.errors.append(PunctuationError(
+                    line=line_num,
+                    column=col + 1,
+                    level=level,
+                    error_type=etype,
+                    message=msg,
+                    context=self._get_context(line, col),
+                    suggestion=sugg
+                ))
+
+    def _check_ellipsis_run(self, line: str, line_num: int):
+        """GB/T 15834-2011 A.9.1：不能多于两个省略号（即十二点以上）连用"""
+        if line.count('……') > 2:
+            self.errors.append(PunctuationError(
+                line=line_num,
+                column=1,
+                level=ErrorLevel.ERROR,
+                error_type="省略号格式",
+                message="省略号连用不应超过两个（十二点）",
+                context=self._get_context(line, 0, width=20),
+                suggestion="删减连用数量（A.9.1）"
+            ))
+
+    def _check_ordinal_bracket(self, line: str, line_num: int):
+        """GB/T 15834-2011 B.3.4：加括号的序次语（（一）、(1)）后面不用任何点号
+        （B.3.2 对不带括号的汉字序次语才是顿号）"""
+        for match in re.finditer(r'[（(][\d一二三四五六七八九十]{1,3}[）\)]\s*[、，。；]', line):
+            col = match.start()
+            self.errors.append(PunctuationError(
+                line=line_num,
+                column=col + 1,
+                level=ErrorLevel.WARNING,
+                error_type="序次语",
+                message="带括号的序次语后面不用点号",
+                context=self._get_context(line, col),
+                suggestion="删除序次语后的点号（B.3.4）"
+            ))
+
+    def _check_arabic_ordinal(self, line: str, line_num: int):
+        """GB/T 15834-2011 B.3.3：不带括号的阿拉伯数字做行首序次语时，
+        后面用下脚点「.」，不用顿号（「1、」应为「1.」）"""
+        m = re.match(r'^\s*(\d{1,3})\s*、', line)
+        if m:
+            self.errors.append(PunctuationError(
+                line=line_num,
+                column=1,
+                level=ErrorLevel.SUGGESTION,
+                error_type="序次语",
+                message="阿拉伯数字序次语后应用下脚点「.」，不用顿号",
+                context=self._get_context(line, 0, width=20),
+                suggestion=f"「{m.group(1)}、」应为「{m.group(1)}.」"
             ))
     
     def _get_context(self, line: str, col: int, width: int = 15) -> str:
