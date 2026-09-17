@@ -104,6 +104,7 @@ class PunctuationChecker:
         self._check_line_start_point(line, line_num)
         self._check_ordinal_conjunction(line, line_num)
         self._check_date_dunhao(line, line_num)
+        self._check_numeric_range_dash(line, line_num)
 
     def _check_line_start_point(self, line: str, line_num: int):
         """GB/T 15834-2011 5.1.1：点号应置于文字之后，居左下，不出现在一行之首"""
@@ -145,6 +146,30 @@ class PunctuationChecker:
                 message="数字年月日简写中不应使用顿号",
                 context=self._get_context(line, col),
                 suggestion="改为短横线连接号，如「2010-03-02」"
+            ))
+
+    def _check_numeric_range_dash(self, line: str, line_num: int):
+        r"""GB/T 15834-2011 4.13.3.2：数值起止应用一字线「—」或浪纹线「～」，
+        4.13.3.1(b) 的短横线仅用于序号/电话/年月日。窄定义：允许数值后
+        紧接 %（如 3.75%-4.00%）；纯整数段（电话、门牌、序号）以及连用段
+        不报"""
+        candidate = r'\d(?:[\d,.]{0,10}\d)?\s*%?\s*-\s*%?\s*\d(?:[\d,.]{0,10}\d)?\s*%?'
+        for match in re.finditer(candidate, line):
+            if not re.search(r'[.%]', match.group(0)):
+                continue
+            before = line[:match.start()]
+            after = line[match.end():]
+            if re.match(r'\s*-\s*\d', after) or before.rstrip().endswith('-'):
+                continue
+            col = match.start()
+            self.errors.append(PunctuationError(
+                line=line_num,
+                column=col + 1,
+                level=ErrorLevel.WARNING,
+                error_type="连接号",
+                message="数值区间不应使用短横线",
+                context=self._get_context(line, col),
+                suggestion="改为一字线「—」或浪纹线「～」，如「3.75%—4.00%」"
             ))
     
     def _get_context(self, line: str, col: int, width: int = 15) -> str:
