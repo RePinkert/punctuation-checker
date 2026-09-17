@@ -90,6 +90,21 @@ class PunctuationChecker:
         self._check_ellipsis_and_dash(line, line_num)
         self._check_dunhao_usage(line, line_num)
         self._check_sentence_end(line, line_num)
+        self._check_line_start_point(line, line_num)
+
+    def _check_line_start_point(self, line: str, line_num: int):
+        """GB/T 15834-2011 5.1.1：点号应置于文字之后，居左下，不出现在一行之首"""
+        stripped = line.strip()
+        if stripped and stripped[0] in '，。、；：？！':
+            self.errors.append(PunctuationError(
+                line=line_num,
+                column=1,
+                level=ErrorLevel.WARNING,
+                error_type="点号位置",
+                message=f"点号「{stripped[0]}」不应出现在一行之首",
+                context=self._get_context(line, 0, width=20),
+                suggestion="删除该点号或移动到上一行句末"
+            ))
     
     def _get_context(self, line: str, col: int, width: int = 15) -> str:
         """获取错误上下文"""
