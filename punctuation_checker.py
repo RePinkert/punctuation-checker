@@ -359,14 +359,22 @@ class PunctuationChecker:
         if not stripped or len(stripped) < 5:
             return
 
-        if re.match(r'^[#*\-\d\.、]+', stripped):
+        # GB/T 15834-2011 B.3.3/B.3.4：只有真正的序次语列表项才免检句末，
+        # 如 "1. " "1、" "1) " "(1)" "（一）"；以数字开头的普通句子（如年份）仍需检查
+        if re.match(r'^[#*\-]', stripped):
             return
-        if re.match(r'^[（\(]\d+[）\)]', stripped):
+        if re.match(r'^\d+\s*[.、)\]）]\s*\S', stripped):
+            return
+        if re.match(r'^[（\(][\d一二三四五六七八九十]+[）\)]', stripped):
+            return
+        # 点号开头的行由 5.1.1 点号位置检查负责，避免重复报
+        if stripped[0] in '，。、；：？！':
             return
 
         last_char = stripped[-1]
 
-        if last_char in '"\u201d\u2019\'\u300f》）】」':
+        close_marks = '"\u201d\u2019\'\u300f》）】」\u3009\u3015\u3017\u300d'
+        if last_char in close_marks:
             if len(stripped) > 1:
                 last_char = stripped[-2]
             else:
@@ -375,7 +383,7 @@ class PunctuationChecker:
         if last_char not in self.SENTENCE_END_PUNCS:
             if last_char in '：；;:%％':
                 return
-            effective_end = stripped.rstrip('"\'\u201d\u2019\u300f》）】」')
+            effective_end = stripped.rstrip('"\'\u201d\u2019\u300f》）】」\u3009\u3015\u3017\u300d')
             if effective_end and re.search(r'[\d%％]$', effective_end):
                 return
             if self._has_chinese(stripped):
