@@ -16,6 +16,17 @@ To set up a new experiment:
 5. **Establish baseline**: Run `python evaluate.py > run.log 2>&1` and record the baseline f1_score.
 6. **Confirm and go**: Confirm setup looks good.
 
+## State reconstruction protocol (run at the START of EVERY turn)
+
+Your conversational memory is unreliable in long sessions. Never rely on it; rebuild state from disk artifacts each turn:
+
+1. Run `git branch --show-current` and `git log --oneline -3`. If the branch is not `autoresearch/<tag>`, stop and fix it (`git checkout autoresearch/<tag>`).
+2. Read `results.tsv` — this is the ONLY trustworthy history of experiments.
+3. State to yourself before the next experiment: current best f1_score, the last kept commit, and the weakest error_type (from `eval_results.json` per-type recall).
+4. `run.log`, `eval_results.json` are overwritten EVERY run — they reflect only the LATEST run. Never use them as history.
+
+**Recovery**: if `results.tsv` is missing, rebuild it from `git log` + `WORKFLOW.md` and re-baseline with `python evaluate.py`. If unsure where you are, make a "data" entry in results.tsv describing the reconstructed state before continuing.
+
 ## Experimentation
 
 **What you CAN do:**
@@ -76,16 +87,17 @@ The experiment runs on a dedicated branch (e.g. `autoresearch/apr29`).
 
 LOOP FOREVER:
 
-1. Look at the git state: current branch/commit
-2. Tune `punctuation_checker.py` with an experimental idea
-3. git commit
-4. Run experiment: `python evaluate.py > run.log 2>&1`
-5. Read results: `grep "^f1_score:\|^precision:\|^recall:" run.log`
-6. If grep is empty → crash. Read `tail -n 50 run.log` for the stack trace, attempt fix.
-7. Record results in results.tsv (do NOT commit results.tsv)
-8. If f1_score improved (higher) → keep the commit
-9. If f1_score is equal or worse → git reset back to previous commit
-10. REPEAT
+1. State-anchoring: re-verify branch + read results.tsv + recall best f1 (see State reconstruction protocol).
+2. Look at the git state: current branch/commit
+3. Tune `punctuation_checker.py` with an experimental idea
+4. git commit
+5. Run experiment: `python evaluate.py > run.log 2>&1`
+6. Read results: `grep "^f1_score:\|^precision:\|^recall:" run.log`
+7. If grep is empty → crash. Read `tail -n 50 run.log` for the stack trace, attempt fix.
+8. Record results in results.tsv (do NOT commit results.tsv)
+9. If f1_score improved (higher) → keep the commit
+10. If f1_score is equal or worse → git reset back to previous commit
+11. REPEAT
 
 **Crashes**: If a run crashes, fix simple bugs (typos, import errors) and re-run. If the idea is fundamentally broken, log "crash" and move on.
 
@@ -94,6 +106,16 @@ LOOP FOREVER:
 ## Analysis tips
 
 After each run, check `eval_results.json` for per-type recall to identify which categories need improvement. Focus your experiments on the weakest categories first.
+
+**Rule anchoring (GB/T 15834-2011)**: every experimental idea must trace to a specific clause of the standard. Examples:
+- 4.2.3.2 / 4.3.3.2: question/exclamation marks may repeat up to 3 (already implemented — could refine from `{4,}` to exact 4)
+- 5.1.1: 点号 not at line start; 5.1.10: 半角占位 narrowing
+- A.4: 顿号 between items with 顺序关系 should be comma, not 顿号
+- A.9.1: ellipsis must not exceed 2 (12 dots); "等"/"等等" must not co-occur with 省略号
+- B.3.1/B.3.5: ordinal wording ("第一"、"其"、"首先") followed by comma or space; Arabic ordinals take 下脚点
+- B.4: titles usually carry no ending punc, but may carry ？ ！ ……
+
+Quote the clause id in the results.tsv description so iteration is auditable.
 
 ## External corpus evaluation
 

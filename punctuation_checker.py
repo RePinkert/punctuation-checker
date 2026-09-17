@@ -118,13 +118,6 @@ class PunctuationChecker:
         cn_ctx = r'[\u4e00-\u9fff\u300a\u300b\u300c\u300d\u300e\u300f\u3010\u3011\uff08\uff09\u201c\u201d\u2018\u2019\u2026\u3001\uff0c\u3002\uff1b\uff1a\uff1f\uff01]'
 
         patterns = [
-            (r'[\u4e00-\u9fff],', '，', '中文句子中使用了英文逗号'),
-            (r'[\u4e00-\u9fff]\.(?![a-zA-Z0-9])', '。', '中文句子中使用了英文句号'),
-            (r'[\u4e00-\u9fff]:', '：', '中文句子中使用了英文冒号'),
-            (r'[\u4e00-\u9fff];', '；', '中文句子中使用了英文分号'),
-            (r'[\u4e00-\u9fff]\?', '？', '中文句子中使用了英文问号'),
-            (r'[\u4e00-\u9fff]!', '！', '中文句子中使用了英文感叹号'),
-            (r'[\u4e00-\u9fff]\([^\)]*[\u4e00-\u9fff]', '()', '中文句子中使用了英文括号'),
             (fr'{cn_ctx},', '，', '中文标点后使用了英文逗号'),
             (fr'{cn_ctx}\.(?![a-zA-Z0-9])', '。', '中文标点后使用了英文句号'),
             (fr'{cn_ctx}:', '：', '中文标点后使用了英文冒号'),
@@ -146,10 +139,10 @@ class PunctuationChecker:
                         line=line_num,
                         column=col,
                         level=ErrorLevel.ERROR,
-                        error_type="\u4e2d\u82f1\u6587\u6807\u70b9\u6df7\u7528",
-                        message="\u4e2d\u6587\u53e5\u5b50\u4e2d\u4f7f\u7528\u4e86\u82f1\u6587\u62ec\u53f7",
+                        error_type="中英文标点混用",
+                        message="中文句子中使用了英文括号",
                         context=self._get_context(line, col),
-                        suggestion="\u5e94\u4f7f\u7528\u4e2d\u6587\u62ec\u53f7\u300c\uff08\uff09\u300d"
+                        suggestion="应使用中文括号「（）」"
                     ))
 
         for pattern, correct, msg in patterns:
