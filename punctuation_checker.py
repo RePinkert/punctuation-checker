@@ -21,6 +21,17 @@ from dataclasses import dataclass
 from typing import List, Optional
 from enum import Enum
 
+# GB/T 15834-2011 第 1 章：适用于汉语书面语（含汉语和外文混合排版时的汉语部分）。
+# 汉字判定范围 = CJK Unified Ideographs 基本区 U+4E00–9FFF + 扩展 A U+3400–4DBF。
+# 兼容区 F900–FAFF 与扩展 B 起的表意平面不在本范围内。
+CJK_TEXT = r'\u4e00-\u9fff\u3400-\u4dbf'
+CJK_TEXT_RE = re.compile(f'[{CJK_TEXT}]')
+
+# 中文标点所在区：CJK 符号和标点区 U+3000–303F、全角区 U+FF01–FF1F/FF08/FF09/
+# FF0C/FF1A/FF1B、弯引号区 U+2018–201F 以及书名号/篇号/题号 (《》〈〉「」『』【】〔〕) 专用
+CJK_PUNCT = r'\u3001\u3002\u300a\u300b\u300c\u300d\u300e\u300f\u3010\u3011\u3014\u3015\u2018-\u201f\uff01\uff08\uff09\uff0c\uff1a\uff1b\uff1f'
+CJK_CONTEXT_RE = re.compile(f'[{CJK_TEXT}{CJK_PUNCT}]')
+
 
 class ErrorLevel(Enum):
     ERROR = "错误"
@@ -148,19 +159,19 @@ class PunctuationChecker:
         return context
     
     def _is_chinese_char(self, char: str) -> bool:
-        """判断是否为中文字符"""
-        return '\u4e00' <= char <= '\u9fff'
-    
+        """判断是否为汉字字符（CJK 基本区 + 扩展 A）"""
+        return bool(CJK_TEXT_RE.match(char))
+
     def _has_chinese(self, text: str) -> bool:
-        """判断文本是否包含中文"""
-        return any(self._is_chinese_char(c) for c in text)
-    
+        """判断文本是否包含汉字"""
+        return bool(CJK_TEXT_RE.search(text))
+
     def _check_chinese_english_mixed(self, line: str, line_num: int):
         """检测中英文标点混用"""
         if not self._has_chinese(line):
             return
-            
-        cn_ctx = r'[\u4e00-\u9fff\u300a\u300b\u300c\u300d\u300e\u300f\u3010\u3011\uff08\uff09\u201c\u201d\u2018\u2019\u2026\u3001\uff0c\u3002\uff1b\uff1a\uff1f\uff01]'
+
+        cn_ctx = rf'[{CJK_TEXT}{CJK_PUNCT}]'
 
         patterns = [
             (fr'{cn_ctx},', '，', '中文标点后使用了英文逗号'),
@@ -174,11 +185,11 @@ class PunctuationChecker:
         paren_pattern = r'\(([^\)]*)\)'
         for match in re.finditer(paren_pattern, line):
             content = match.group(1)
-            has_cn_inside = any('\u4e00' <= c <= '\u9fff' for c in content)
+            has_cn_inside = bool(CJK_TEXT_RE.search(content))
             has_en_inside = any(c.isascii() and c.isalpha() for c in content)
             if has_cn_inside and not has_en_inside:
                 before = line[:match.start()]
-                if before and ('\u4e00' <= before[-1] <= '\u9fff' or before[-1] in '\uff0c\u3002\uff1b\uff1a\u201c\u201d'):
+                if before and (bool(CJK_TEXT_RE.match(before[-1])) or before[-1] in '\uff0c\u3002\uff1b\uff1a\u201c\u201d'):
                     col = match.start() + 1
                     self.errors.append(PunctuationError(
                         line=line_num,
