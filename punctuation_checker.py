@@ -91,6 +91,7 @@ class PunctuationChecker:
         self._check_dunhao_usage(line, line_num)
         self._check_sentence_end(line, line_num)
         self._check_line_start_point(line, line_num)
+        self._check_ordinal_conjunction(line, line_num)
 
     def _check_line_start_point(self, line: str, line_num: int):
         """GB/T 15834-2011 5.1.1：点号应置于文字之后，居左下，不出现在一行之首"""
@@ -104,6 +105,20 @@ class PunctuationChecker:
                 message=f"点号「{stripped[0]}」不应出现在一行之首",
                 context=self._get_context(line, 0, width=20),
                 suggestion="删除该点号或移动到上一行句末"
+            ))
+
+    def _check_ordinal_conjunction(self, line: str, line_num: int):
+        """GB/T 15834-2011 B.3.1：序次语（"首先"、"其次"、"再次"、"最后"）之后用逗号"""
+        for match in re.finditer(r'(首先|其次|再次|最后)、', line):
+            col = match.start()
+            self.errors.append(PunctuationError(
+                line=line_num,
+                column=col + 1,
+                level=ErrorLevel.WARNING,
+                error_type="顿号使用",
+                message=f"序次语「{match.group(1)}」之后应用逗号，不用顿号",
+                context=self._get_context(line, col),
+                suggestion="顿号改为逗号"
             ))
     
     def _get_context(self, line: str, col: int, width: int = 15) -> str:
