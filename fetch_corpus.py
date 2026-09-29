@@ -2,12 +2,19 @@
 # -*- coding: utf-8 -*-
 """
 Download external Chinese corpora for punctuation checker evaluation.
-- UD Chinese-GSD: zero-dependency (urllib), ~5K gold-annotated sentences
-- HuggingFace datasets: requires `pip install datasets`
+All three corpora are fetched with the Python standard library only (urllib);
+no `datasets` package required.
+
+- UD Chinese-GSD: raw .conllu from GitHub -> ~5K sentences (clean text)
+- shibing624/chinese_text_correction: plain .tsv files on HuggingFace ->
+  writes corpus_hf_correction.txt (unique corrected targets, clean text) and
+  corpus_hf_pairs.tsv (source<TAB>target error/correction pairs for mode C)
+- feilongfl/ChineseNewsSummary: plain train.json on HuggingFace -> titles/summaries
 """
 
 import os
 import sys
+import json
 import urllib.request
 import tempfile
 
@@ -19,6 +26,27 @@ UD_GSD_FILES = [
     "zh_gsd-ud-dev.conllu",
     "zh_gsd-ud-test.conllu",
 ]
+
+HF_CORRECTION_BASE = "https://huggingface.co/datasets/shibing624/chinese_text_correction/resolve/main/"
+HF_CORRECTION_FILES = [
+    "lemon_enc.tsv",
+    "lemon_new.tsv",
+    "lemon_nov.tsv",
+    "lemon_car.tsv",
+    "lemon_cot.tsv",
+    "lemon_gam.tsv",
+    "lemon_mec.tsv",
+    "TextProofreadingCompetition.tsv",
+    "grammar.tsv",
+    "ec_law.tsv",
+    "ec_med.tsv",
+    "ec_odw.tsv",
+    "cscd_ns.tsv",
+    "medical_csc.tsv",
+]
+
+HF_NEWS_BASE = "https://huggingface.co/datasets/feilongfl/ChineseNewsSummary/resolve/main/"
+HF_NEWS_FILE = "train.json"
 
 
 def download_file(url: str) -> str:
@@ -82,52 +110,83 @@ def fetch_ud_gsd():
 
 
 def fetch_hf_correction():
-    print("\n=== Fetching shibing624/chinese_text_correction ===")
-    try:
-        from datasets import load_dataset
-    except ImportError:
-        print("  SKIP: `datasets` not installed. Run: pip install datasets")
-        return 0
+    """Download shibing624/chinese_text_correction as plain TSVs (stdlib only).
 
-    ds = load_dataset("shibing624/chinese_text_correction", split="train")
+    Produces two files:
+      - corpus_hf_correction.txt : unique corrected `target` sentences (clean text, modes A/B)
+      - corpus_hf_pairs.tsv      : every `source<TAB>target` row (mode C real-error test)
+    """
+    print("\n=== Fetching shibing624/chinese_text_correction (TSV via urllib) ===")
     sentences = set()
-    for row in ds:
-        target = row.get("target", "").strip()
-        if target and len(target) > 5 and len(target) < 500:
-            cn_puncs = "\u3002\uff0c\uff1f\uff01"
-            if any(p in target for p in cn_puncs):
-                sentences.add(target)
+    pairs = []
+    for fname in HF_CORRECTION_FILES:
+        url = HF_CORRECTION_BASE + fname
+        data = download_file(url)
+        if not data:
+            continue
+        count = 0
+        lines = data.split("\n")
+        for i, line in enumerate(lines):
+            if i == 0 and line.lower().startswith("source"):
+                continue  # header
+            parts = line.split("\t")
+            if len(parts) < 2:
+                continue
+            source = parts[0].strip()
+            target = parts[1].strip()
+            if not source or not target:
+                continue
+            count += 1
+            pairs.append((source, target))
+            if 5 < len(target) < 500:
+                cn_puncs = "\u3002\uff0c\uff1f\uff01"
+                if any(p in target for p in cn_puncs):
+                    sentences.add(target)
+        print(f"  {fname}: {count} rows")
 
+    # Clean-text corpus (modes A/B)
     out_path = os.path.join(_SCRIPT_DIR, "corpus_hf_correction.txt")
     with open(out_path, "w", encoding="utf-8") as f:
         for s in sorted(sentences):
             f.write(s + "\n")
-    print(f"  Saved {len(sentences)} sentences to {out_path}")
+    print(f"  Saved {len(sentences)} clean sentences to {out_path}")
+
+    # Error/correction pairs (mode C). TSV-escape newlines/tabs defensively.
+    pairs_path = os.path.join(_SCRIPT_DIR, "corpus_hf_pairs.tsv")
+    with open(pairs_path, "w", encoding="utf-8", newline="\n") as f:
+        for source, target in pairs:
+            f.write(source.replace("\t", " ").replace("\n", " ")
+                    + "\t" + target.replace("\t", " ").replace("\n", " ") + "\n")
+    print(f"  Saved {len(pairs)} source/target pairs to {pairs_path}")
     return len(sentences)
 
 
 def fetch_hf_news():
-    print("\n=== Fetching feilongfl/ChineseNewsSummary ===")
+    """Download feilongfl/ChineseNewsSummary as a plain JSON array (stdlib only)."""
+    print("\n=== Fetching feilongfl/ChineseNewsSummary (train.json via urllib) ===")
+    url = HF_NEWS_BASE + HF_NEWS_FILE
+    raw = download_file(url)
+    if not raw:
+        print("  SKIP: could not download train.json")
+        return 0
     try:
-        from datasets import load_dataset
-    except ImportError:
-        print("  SKIP: `datasets` not installed.")
+        rows = json.loads(raw)
+    except Exception as e:
+        print(f"  ERROR parsing train.json: {e}")
         return 0
 
-    ds = load_dataset("feilongfl/ChineseNewsSummary", split="train")
     sentences = set()
     cn_puncs = "\u3002\uff0c\uff1f\uff01"
-    for row in ds:
-        output_str = row.get("output", "").strip()
+    for row in rows:
+        output_str = (row.get("output") or "").strip()
         if not output_str:
             continue
         try:
-            import json as _json
-            data = _json.loads(output_str)
+            data = json.loads(output_str)
         except Exception:
             continue
         for field in ["summary", "title"]:
-            text = data.get(field, "").strip()
+            text = (data.get(field) or "").strip()
             if text and 8 < len(text) < 500:
                 if any(p in text for p in cn_puncs):
                     sentences.add(text)

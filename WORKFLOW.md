@@ -14,7 +14,7 @@
 ### 1.2 本地初始化
 
 ```bash
-cd X:\Trans-AM\Yet\2-punctuation-checker
+cd C:\Yet\punctuation-checker
 git init
 git remote add origin https://github.com/RePinkert/punctuation-checker.git
 git add punctuation_checker.py test_punctuation_checker.py punctuation_checker_readme.md
@@ -141,6 +141,55 @@ per-type recall:
 | `d2a6241` | Expand mixed CN/EN punc patterns; fix sentence-end mutator for ellipsis | 0.9975 |
 | `170ea08` | Fix corpus ASCII quotes; add Chinese closing quotes to sentence-end check | 1.0000 |
 | `b94ca1a` | Expand corpus to 88 sentences, add 2 new mutators | 1.0000 |
+| `869eae4` | Flag dunhao in numeric dates (GB/T A.4.4.2) | 1.0000 |
+| `e9937c7` | Flag ellipsis+等 co-occurrence (GB/T A.9.2) | 1.0000 |
+| `96dc8fe` | Flag dunhao after ordinal transitions (GB/T B.3.1) | 1.0000 |
+| `8d05c14` | Add line-start punc check (GB/T 5.1.1) | 1.0000 |
+| `f4f8a7f` | Refine sentence-end guards (GB/T B.3.3/B.3.4) | 1.0000 |
+| `fa65b3c` | Centralize CJK charset constants (base + Ext-A) | 1.0000 |
+| `5f1efa1` | Flag hyphen in numeric ranges (GB/T 4.13.3.2) | 1.0000 |
+
+> 自 `b94ca1a` 达到 F1=1.0 后，合成指标已触顶，后续迭代改以**外部语料 FP 率**与**外部变异 F1**作为区分信号（合成 F1 持续保持 1.0）。详见阶段六。
+
+---
+
+## 阶段六：GB/T 条款覆盖矩阵与 G 类条款补齐
+
+### 6.1 条款形式化覆盖矩阵
+
+新增 `CLAUSE_COVERAGE.md`（commit `bb89867`）：把 GB/T 15834-2011 的可分则条款逐条映射为状态标记——
+`R` 已实现 / `H` 可启发式 / `G` 可 regex 但未实现 / `S` 语义类（正则不可表达） / `T` 排版字形（纯文本不可判）。
+按成行条目统计，共 **101** 条，其中 R 类 35 条（含 R-部分 10 条）、G 类缺口 5 条。
+
+### 6.2 G 类条款批量实现（commit `3816d0d`）
+
+按矩阵优先级补齐 9 条 G 类规则：
+
+- 4.10.2 单个破折号（形式应为 `——`）→ WARNING
+- B.3.2 / B.3.4 带括号序次语后不用点号 → WARNING
+- B.3.3 阿拉伯数字行首序次语应用下脚点 → SUGGESTION
+- A.12 并列标题已用间隔号则不再用「和」→ SUGGESTION
+- A.13.5 篇名末尾的 ？！ 应在书名号内 → SUGGESTION
+- A.14 分隔号前后不贴点号 → SUGGESTION
+- 4.8.3.4 / 4.9.3.6 同形引号/括号不得嵌套 → ERROR
+- 4.14.3.5 事件年月日间隔号应用半角 `·`、两侧无空格 → WARNING
+- B.1.2 顿号后接「等」类词（与 A.9.2 镜像）→ SUGGESTION
+
+同时撤回** B.2.4、4.5.3.5 两条：语料筛查显示它们属语义/软规则，UD-GSD 上 FP 过高，矩阵已改标为 S/H。
+
+### 6.3 对照标准原文核实（commit 后续）
+
+以标准原文 PDF（`15834-2011-gbt-e-300.pdf`）逐条核实 `CLAUSE_COVERAGE.md`，发现并修正了多处描述错误：
+
+| 条款 | 原矩阵描述 | 标准原文 | 处置 |
+|---|---|---|---|
+| B.3.2 | 带括号汉字序次语后用顿号 | “**不带括号**的汉字数字或天干地支‖做序次语时，后用顿号” | 已改为 S（难与 4.5.3.4 区分） |
+| B.3.3 | 阿拉伯数字序次语后用下脚点 | “不带括号的阿拉伯数字、**拉丁字母或罗马数字**‖” | 标为 R（部分），补注拉丁/罗马未覆盖 |
+| B.3.4 | 带括号序次语后不用点号 | “加括号的序次语后面不用任何点号” | 已核实，代码实现正确 |
+| B.3.5 | 阿拉伯数字+下脚点后不用点号 | “……**表示章节关系**的序次语末尾不用任何点号” | 补齐限定语 |
+| 4.14.3.5 | 阿拉伯数字事件年月日用半角「·」 | 汉字数字表示时**只在一、十一和十二月后**用间隔号；阿拇伯数字表示时月日之间用半角间隔号 | 补齐义义，标为 R（部分） |
+| 4.5.3.4 | 相邻两数字表概数宜用顿号 | “表礼数通常**不用**顿号”（方向相反） | 修正方向，保持 G |
+
 
 ---
 
@@ -148,19 +197,20 @@ per-type recall:
 
 ### 4.1 语料拉取
 
-创建 `fetch_corpus.py` 下载三个外部语料库：
+`fetch_corpus.py` 拉取三个外部语料库，**全部仅用标准库 `urllib`**（不再需要 `pip install datasets`）：
 
 | 语料 | 句数 | 来源 | 下载方式 |
 |---|---|---|---|
-| UD Chinese-GSD | 4,992 | GitHub | `urllib` (零依赖) |
-| chinese_text_correction | 54,344 | HuggingFace | `pip install datasets` |
-| ChineseNewsSummary | 26,940 | HuggingFace | `pip install datasets` |
+| UD Chinese-GSD | 4,992 | GitHub | `urllib` 拉取 `.conllu` |
+| shibing624/chinese_text_correction | 54,347（clean）+ 108,315（pairs） | HuggingFace | `urllib` 拉取 14 个 `.tsv` |
+| ChineseNewsSummary | 26,940 | HuggingFace | `urllib` 拉取 `train.json` |
 
 运行：`python fetch_corpus.py`
 
 生成文件：
 - `corpus_ud_gsd.txt`
-- `corpus_hf_correction.txt`
+- `corpus_hf_correction.txt`（清洗后 target 句，供模式 A/B）
+- `corpus_hf_pairs.tsv`（source→target 纠错对，供模式 C）
 - `corpus_hf_news.txt`
 
 ### 4.2 三模式评估
@@ -173,28 +223,28 @@ per-type recall:
 
 | 语料 | 句数 | FP 率 | 主要误报 |
 |---|---|---|---|
-| UD Chinese-GSD | 2,000 | **0.30%** | 跨行配对引号 (4), 句末标点 (2) |
-| ChineseNewsSummary | 2,000 | **30.35%** | 句末标点 (589) — 新闻标题省略句号 |
+| UD Chinese-GSD | 2,000 | **0.30%** | 标点配对 (4), 连接号 (2), 句末标点 (1) |
+| ChineseNewsSummary | 2,000 | **33.05%** | 句末标点 (633), 标点空格 (15), 连接号 (12) — 新闻标题省略句号 |
 
 #### 模式 B：扩展变异测试
 
-用外部语料句子作为变异基底，运行 10 个变异算子。
+用外部语料句子作为变异基底，运行变异算子。
 
 | 语料 | F1 | Precision | Recall |
 |---|---|---|---|
-| UD Chinese-GSD | **0.9953** | 0.9938 | 0.9969 |
-| ChineseNewsSummary | **0.7754** | 0.6586 | 0.9425 |
+| UD Chinese-GSD | **0.9984** | 0.9969 | 1.0000 |
+| ChineseNewsSummary | **0.7858** | 0.6533 | 0.9856 |
 
 #### 模式 C：真实错误检出
 
-用 `shibing624/chinese_text_correction` 数据集中的 1,403 条含真实标点差异的数据测试。
+用 `shibing624/chinese_text_correction` 数据集（`corpus_hf_pairs.tsv`）中含真实标点差异的样本测试。
 
 | 指标 | 值 |
 |---|---|
 | 总扫描行数 | 108,315 |
-| 含标点差异的行 | 1,403 |
-| Checker 检出行数 | 576 (**41%**) |
-| 主要检出类型 | 中英文标点混用 (2,104), 句末标点 (137), 标点配对 (55) |
+| 含标点差异的行 | 1,402 |
+| Checker 检出行数 | 587 (**41.87%**) |
+| 主要检出类型 | 中英文标点混用 (1,051), 句末标点 (145), 标点配对 (55), 序次语 (13) |
 
 ### 4.3 基于外部评估的改进
 
@@ -203,13 +253,15 @@ per-type recall:
 1. `_check_sentence_end`：跳过以 `%`/数字结尾的行（新闻中如 "跌超4%" 属正常）
 2. `_check_chinese_english_mixed`：英文括号检测改为只在括号内为纯中文内容时报错，中英混合内容不再误报
 
-**改进效果**：
+**改进效果（属于 `4d7395e` 当时的测量值）**：
 
-| 指标 | 改前 | 改后 |
+| 指标 | 改前 | 改后（当时） |
 |---|---|---|
 | 新闻 FP 率 | 34.25% | 30.35% |
 | 新闻句末标点 FP | 667 | 589 |
 | 合成 F1 | 1.0000 | 1.0000 (不变) |
+
+> 注：上表是 `4d7395e` 那一次改动的当时对比。截至当前 HEAD（`3816d0d`），新闻 FP 率为 **33.05%**（674 FP）——后续新增规则（如连接号、空格、间隔号等）在新闻体上亦有误报，但主体仍是句末标点缺失（633），属预期行为。
 
 ---
 
@@ -217,11 +269,11 @@ per-type recall:
 
 ### 已知局限
 
-1. **句末标点检查 vs 新闻文本**：新闻标题/摘要省略句号是行业标准，strict 模式下的 SUGGESTION 级别报错属预期行为（589 FP / 2000 句新闻）。目前无法可靠区分"标题省略句号"和"句子缺失句号"。
+1. **句末标点检查 vs 新闻文本**：新闻标题/摘要省略句号是行业标准，strict 模式下的 SUGGESTION 级别报错属预期行为（633 FP / 2000 句新闻）。目前无法可靠区分"标题省略句号"和"句子缺失句号"。
 
 2. **跨行配对引号**：checker 逐行处理，无法检测跨行的配对标点（如引号在第1行打开、第3行关闭）。UD-GSD 中有 4 个此类 FP。
 
-3. **真实错误检出率 41%**：合成变异只覆盖 7 种错误类型，真实文本中的标点错误更加多样（如标点位置不当、语气不符、语境误用等），当前规则无法覆盖。
+3. **真实错误检出率 41.87%**：合成变异只覆盖 7 种错误类型，真实文本中的标点错误更加多样（如标点位置不当、语气不符、语境误用等），当前规则无法覆盖。
 
 4. **繁体中文**：UD-GSD 使用繁体中文，部分词汇/标点习惯与简体中文不同，可能导致误判。
 
@@ -237,13 +289,14 @@ per-type recall:
 ## 文件结构总览
 
 ```
-2-punctuation-checker/
+punctuation-checker/                 # 当前路径：C:\Yet\punctuation-checker
 ├── punctuation_checker.py          # 核心检查器（autoresearch 优化目标）
 ├── test_punctuation_checker.py     # 原始手工测试
 ├── punctuation_checker_readme.md   # 检查器使用说明
 ├── evaluate.py                     # 合成变异评估（不可变）
 ├── corpus_clean.txt                # 正确中文句子语料（88句，不可变）
 ├── program.md                      # autoresearch agent 指令
+├── CLAUSE_COVERAGE.md              # GB/T 条款形式化覆盖矩阵
 ├── fetch_corpus.py                 # 外部语料下载脚本
 ├── evaluate_external.py            # 外部语料评估脚本（三模式）
 ├── WORKFLOW.md                     # 本文档
@@ -252,7 +305,8 @@ per-type recall:
 │
 │   （以下为运行时生成，git 不跟踪）
 ├── corpus_ud_gsd.txt               # UD Chinese-GSD 语料 (4,992句)
-├── corpus_hf_correction.txt        # chinese_text_correction 语料 (54,344句)
+├── corpus_hf_correction.txt        # chinese_text_correction 清洗句 (54,347句)
+├── corpus_hf_pairs.tsv             # 纠错对 source→target (108,315对，模式C用)
 ├── corpus_hf_news.txt              # ChineseNewsSummary 语料 (26,940句)
 ├── eval_results.json               # 合成评估详细结果
 ├── eval_external_results.json      # 外部评估详细结果
@@ -265,18 +319,19 @@ per-type recall:
 
 ## 快速复现
 
+> 三个语料均可用标准库 `urllib` 拉取，**无需安装任何第三方包**（不再需要 `pip install datasets`）。
+
 ### 运行合成评估
 
 ```bash
 python evaluate.py
 ```
 
-### 拉取外部语料并评估
+### 拉取外部语料并评估（三模式）
 
 ```bash
-pip install datasets
-python fetch_corpus.py
-python evaluate_external.py
+python fetch_corpus.py        # ~23MB TSV + ~40MB JSON，首次约 1-2 分钟
+python evaluate_external.py   # 模式 A 误报率 / B 扩展变异 / C 真实错误检出
 ```
 
 ### 启动 autoresearch 迭代优化

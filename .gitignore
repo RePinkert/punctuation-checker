@@ -7,5 +7,6 @@ misses_*.json
 corpus_ud_gsd.txt
 corpus_hf_correction.txt
 corpus_hf_news.txt
+corpus_hf_pairs.tsv
 __pycache__/
 *.pyc

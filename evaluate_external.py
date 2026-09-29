@@ -311,50 +311,72 @@ def run_mutation_test(checker: PunctuationChecker, sentences: List[str],
     }
 
 
-def run_real_error_test(checker: PunctuationChecker) -> Optional[Dict]:
-    correction_path = os.path.join(_SCRIPT_DIR, "corpus_hf_correction.txt")
-    if not os.path.exists(correction_path):
-        print("\n--- Real Error Test: SKIPPED (no HF correction corpus) ---")
-        return None
+def load_hf_pairs() -> Optional[List[Tuple[str, str]]]:
+    """Load source/target error-correction pairs produced by fetch_corpus.py.
 
-    print("\n--- Real Error Test: shibing624/chinese_text_correction ---")
+    Preferred (stdlib-only) path reads corpus_hf_pairs.tsv. If that file is
+    absent but the `datasets` package is installed, fall back to loading the
+    HF dataset directly.
+    """
+    pairs_path = os.path.join(_SCRIPT_DIR, "corpus_hf_pairs.tsv")
+    if os.path.exists(pairs_path):
+        pairs = []
+        with open(pairs_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                parts = line.split("\t")
+                if len(parts) >= 2 and parts[0] and parts[1]:
+                    pairs.append((parts[0], parts[1]))
+        return pairs
+
     try:
         from datasets import load_dataset
     except ImportError:
-        print("  SKIP: `datasets` not installed")
         return None
 
     ds = load_dataset("shibing624/chinese_text_correction", split="train", trust_remote_code=True)
+    pairs = []
+    for row in ds:
+        source = (row.get("source") or "").strip()
+        target = (row.get("target") or "").strip()
+        if source and target:
+            pairs.append((source, target))
+    return pairs
+
+
+def run_real_error_test(checker: PunctuationChecker) -> Optional[Dict]:
+    pairs_path = os.path.join(_SCRIPT_DIR, "corpus_hf_pairs.tsv")
+    if not os.path.exists(pairs_path):
+        print("\n--- Real Error Test: SKIPPED (no corpus_hf_pairs.tsv; run fetch_corpus.py) ---")
+        return None
+
+    print("\n--- Real Error Detection: shibing624/chinese_text_correction ---")
+    pairs = load_hf_pairs()
+    if not pairs:
+        print("  SKIP: could not load source/target pairs")
+        return None
 
     punct_diff_lines = []
     total_lines = 0
     detected = 0
     error_type_counts = Counter()
 
-    for row in ds:
-        source = row.get("source", "").strip()
-        target = row.get("target", "").strip()
-        if not source or not target:
-            continue
+    for source, target in pairs:
         total_lines += 1
 
-        source_puncs = set(i for i, ch in enumerate(source) if ch in
-                           "\uff0c\u3002\uff1b\uff1a\uff1f\uff01\u3001\u201c\u201d\uff08\uff09\u3010\u3011\u300a\u300b")
-        target_puncs = set(i for i, ch in enumerate(target) if ch in
-                           "\uff0c\u3002\uff1b\uff1a\uff1f\uff01\u3001\u201c\u201d\uff08\uff09\u3010\u3011\u300a\u300b")
-
         has_punct_diff = False
-        if len(source) > 0 and len(target) > 0:
-            if source != target:
-                for i in range(min(len(source), len(target))):
-                    if source[i] != target[i]:
-                        sc = source[i]
-                        tc = target[i]
-                        s_is_punc = sc in "\uff0c\u3002\uff1b\uff1a\uff1f\uff01\u3001\u201c\u201d\uff08\uff09\u3010\u3011\u300a\u300b,.:;?!)\"'("
-                        t_is_punc = tc in "\uff0c\u3002\uff1b\uff1a\uff1f\uff01\u3001\u201c\u201d\uff08\uff09\u3010\u3011\u300a\u300b,.:;?!)\"'("
-                        if s_is_punc or t_is_punc:
-                            has_punct_diff = True
-                            break
+        if source != target:
+            for i in range(min(len(source), len(target))):
+                if source[i] != target[i]:
+                    sc = source[i]
+                    tc = target[i]
+                    s_is_punc = sc in "\uff0c\u3002\uff1b\uff1a\uff1f\uff01\u3001\u201c\u201d\uff08\uff09\u3010\u3011\u300a\u300b,.:;?!)\"'("
+                    t_is_punc = tc in "\uff0c\u3002\uff1b\uff1a\uff1f\uff01\u3001\u201c\u201d\uff08\uff09\u3010\u3011\u300a\u300b,.:;?!)\"'("
+                    if s_is_punc or t_is_punc:
+                        has_punct_diff = True
+                        break
 
         if not has_punct_diff:
             continue
