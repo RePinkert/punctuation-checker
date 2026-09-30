@@ -111,6 +111,42 @@ class PunctuationChecker:
         self._check_ellipsis_run(line, line_num)
         self._check_ordinal_bracket(line, line_num)
         self._check_arabic_ordinal(line, line_num)
+        self._check_narrow_clauses(line, line_num)
+
+    def _check_narrow_clauses(self, line: str, line_num: int):
+        """低误报风险的窄规则集（全部对照标准原文核实）
+
+        - 4.15.3.5 书名号中还需要书名号时，里面一层用单书名号
+        - B.3.6   用于章节、条款的序次语后宜用空格表示停顿
+
+        注：B.3.5（下脚点章节序次语末尾不用任何点号）已尝试但**撤回**——
+        正文中的小数（“7.9公分”“都是0.4。”）与章节号无法用正则区分，
+        UD-GSD 语料上直接产生误报，故不实现。
+        """
+        rules = [
+            # 4.15.3.5 嵌套书名号应为外双内单：《…〈…〉…》；内层误用双书名号即报
+            (r'《[^《》〈〉]{0,60}《', ErrorLevel.ERROR, "书名号使用",
+             "书名号中还需要书名号时，里面一层应用单书名号",
+             "内层改用单书名号「〈〉」（4.15.3.5）"),
+            # B.3.6 章节/条款序次语后宜用空格表示停顿（第一课 春天来了）
+            # 只认行首的序次语（章节/条款标题位置），避免行文中「第三课的内容」等误报
+            (r'^\s*(第[一二三四五六七八九十百千零〇\d]{1,3}[章节课编部篇])(?![\s])(?=\S)',
+             ErrorLevel.SUGGESTION, "序次语",
+             "用于章节、条款的序次语后宜用空格表示停顿",
+             "序次语后加一个空格（B.3.6）"),
+        ]
+        for pattern, level, etype, msg, sugg in rules:
+            for match in re.finditer(pattern, line):
+                col = match.start()
+                self.errors.append(PunctuationError(
+                    line=line_num,
+                    column=col + 1,
+                    level=level,
+                    error_type=etype,
+                    message=msg,
+                    context=self._get_context(line, col),
+                    suggestion=sugg
+                ))
 
     def _check_line_start_point(self, line: str, line_num: int):
         """GB/T 15834-2011 5.1.1：点号应置于文字之后，居左下，不出现在一行之首"""
