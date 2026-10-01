@@ -1,7 +1,7 @@
 <p align="center">
   <a href="README.md"><img src="https://img.shields.io/badge/%E6%96%87%E6%A1%A3-%E4%B8%AD%E6%96%87_Main-6BCB77?style=flat-square" alt="Switch to Chinese README (primary)" /></a>
   <img src="https://img.shields.io/badge/Docs-English-1F6FEB?style=flat-square" alt="doc: en" />
-  <a href="https://skills.sh/RePinkert/punctuation-checker"><img src="https://skills.sh/b/RePinkert/punctuation-checker?style=flat-square" alt="skills.sh" /></a>
+  <a href="https://skills.sh/RePinkert/punctuation-checker/punctuation-checker"><img src="https://skills.sh/b/RePinkert/punctuation-checker?style=flat-square" alt="skills.sh" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/python-3%2B-3776AB?style=flat-square" alt="python 3+" />
   <img src="https://img.shields.io/badge/deps-none-4B8B3F?style=flat-square" alt="zero dependencies" />

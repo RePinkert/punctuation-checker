@@ -260,7 +260,7 @@ print("11. 外部链接可达性")
 print("=" * 70)
 # NOTE: skills.sh/<owner>/<repo> returns 404 until the skill is actually published to
 # the registry. That is expected pre-publication; the badge image still resolves.
-EXPECTED_404 = {"https://skills.sh/RePinkert/punctuation-checker"}
+EXPECTED_404 = set()
 for doc in ["README.md", "README_en.md", "SKILL.md"]:
     text = open(doc, encoding="utf-8").read()
     urls = sorted(set(re.findall(r'(?:href="|src=")(https?://[^"]+)', text)))
