@@ -86,7 +86,9 @@ for doc, other in [("README.md", "README_en.md"), ("README_en.md", "README.md")]
     check(f"{doc} 含 <p align=\"center\"> 徽章块", '<p align="center">' in text)
     check(f"{doc} 徽章块内含跳转链接 href=\"{other}\"", f'href="{other}"' in text)
     check(f"{doc} 使用 img.shields.io 徽章", "img.shields.io" in text)
-    check(f"{doc} 引用 skills.sh 徽章", "skills.sh" in text)
+    # skills.sh install-count badge is intentionally omitted until the skill is indexed
+    # (the endpoint renders a "resource not found" placeholder before then).
+    check(f"{doc} 徽章块不含 skills.sh 徽章", "skills.sh/b/" not in text)
     for link in re.findall(r'href="([^"]+)"', text):
         if link.endswith(".md") and os.path.exists(link):
             check(f"{doc} -> {link} 跳转目标存在", True)
