@@ -305,7 +305,9 @@ per-type recall:
 punctuation-checker/                 # 当前路径：C:\Yet\punctuation-checker
 ├── punctuation_checker.py          # 核心检查器（autoresearch 优化目标）
 ├── test_punctuation_checker.py     # 原始手工测试
-├── punctuation_checker_readme.md   # 检查器使用说明
+├── README.md                       # 检查器使用说明（中文主文档）
+├── README_en.md                    # 英文/LLM 阅读版
+├── SKILL.md                        # Agent Skill 定义（frontmatter + 调用约定）
 ├── evaluate.py                     # 合成变异评估（不可变）
 ├── corpus_clean.txt                # 正确中文句子语料（88句，不可变）
 ├── program.md                      # autoresearch agent 指令
